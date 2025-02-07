@@ -2,10 +2,12 @@ import streamlit as st
 import numpy as np
 import librosa
 import soundfile as sf
-from tensorflow.keras.models import load_model
 import tempfile
 import os
+import time
 from scipy import signal
+from tensorflow.keras.models import load_model
+from streamlit_mic_recorder import mic_recorder
 
 # Load your saved model
 MODEL_PATH = 'heart_sound_model.h5'
@@ -88,23 +90,28 @@ def predict_heart_sound(preprocessed_data):
 
 # Streamlit App
 st.title("Heart Sound Detection Tool")
-st.write("Upload a .wav file to get a prediction on whether the heart sound is healthy or unhealthy.")
+st.write("Upload a .wav file or record your heart sound for analysis.")
 
+# Audio upload
 uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
 
+# Audio recording
+recorded_audio = mic_recorder(start_prompt="Start Recording", stop_prompt="Stop Recording", key="recorder", format="wav", sample_rate=22050, duration=7)
+
+temp_path = None
 if uploaded_file is not None:
-    # Save uploaded file temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
-    
-    # Validate the audio file
-    validation_results, audio_data, sr = validate_audio(temp_path)
-    
-    # Display the audio player
     st.audio(uploaded_file, format='audio/wav')
-    
-    # Check audio quality
+elif recorded_audio:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(recorded_audio)
+        temp_path = temp_audio.name
+    st.audio(temp_path, format='audio/wav')
+
+if temp_path:
+    validation_results, audio_data, sr = validate_audio(temp_path)
     if not all(validation_results.values()):
         st.warning("Audio quality issues detected:")
         if not validation_results['snr']:
@@ -118,46 +125,13 @@ if uploaded_file is not None:
     if st.button("Analyze Audio"):
         with st.spinner("Processing audio..."):
             input_data = preprocess_audio(temp_path)
-        
         with st.spinner("Making prediction..."):
             is_unhealthy, confidence = predict_heart_sound(input_data)
-        
-        # Display results
         if is_unhealthy:
             st.error("Prediction: Unhealthy Heart Sound")
         else:
             st.success("Prediction: Healthy Heart Sound")
         st.write(f"Confidence: {confidence:.2f}%")
-        
-        # Add detailed analysis
-        st.write("\nAudio Analysis:")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("Signal Quality Metrics:")
-            st.write(f"- Duration: {len(audio_data)/sr:.1f} seconds")
-            st.write(f"- Sample Rate: {sr} Hz")
-        with col2:
-            st.write("Preprocessing Applied:")
-            st.write("- Bandpass filtering (20-400 Hz)")
-            st.write("- Noise reduction")
-            st.write("- Length normalization")
-        
-        # Cleanup temporary file
         os.unlink(temp_path)
 
-# Instructions for recording audio
-st.write("\n### How to Record Heart Sounds")
-st.write("""
-1. Use a digital stethoscope or high-quality microphone
-2. Record in a quiet environment
-3. Position the recording device on these locations:
-   - Aortic area (2nd right intercostal space)
-   - Pulmonic area (2nd left intercostal space)
-   - Tricuspid area (4th left intercostal space)
-   - Mitral area (5th left intercostal space)
-4. Record for at least 5 seconds
-5. Save as a WAV file and upload above
-""")
-
-# Footer
 st.write("\n**Note:** This tool is for preliminary detection purposes only and not for diagnostic use. Please consult a healthcare professional for proper diagnosis.")
