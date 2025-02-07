@@ -50,6 +50,12 @@ def predict_heart_sound(preprocessed_data):
 st.title("🫀 Heart Sound Detection Tool")
 st.write("Analyze your heart sounds by uploading a file or recording directly.")
 
+# State variables for managing UI
+if 'audio_bytes' not in st.session_state:
+    st.session_state.audio_bytes = None
+if 'temp_path' not in st.session_state:
+    st.session_state.temp_path = None
+
 # File upload and recording UI
 st.markdown("### 📤 Upload or Record")
 col1, col2 = st.columns(2)
@@ -62,25 +68,30 @@ with col2:
     st.markdown("#### Record your heart sound")
     audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black")
 
-temp_path = None
+if audio_bytes:
+    st.session_state.audio_bytes = audio_bytes
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(audio_bytes)
+        st.session_state.temp_path = temp_audio.name
 
+# Redo and playback options
+if st.session_state.audio_bytes:
+    st.audio(st.session_state.temp_path, format='audio/wav')
+    if st.button("🔄 Redo Recording"):
+        st.session_state.audio_bytes = None
+        st.session_state.temp_path = None
+
+# Prediction and Results
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(uploaded_file.getbuffer())
-        temp_path = temp_audio.name
+        st.session_state.temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
 
-elif audio_bytes:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_bytes)
-        temp_path = temp_audio.name
-    st.audio(temp_path, format='audio/wav')
-
-# Prediction and Results
-if temp_path:
+if st.session_state.temp_path:
     if st.button("🔍 Analyze Heart Sound"):
         with st.spinner("Processing audio and making prediction..."):
-            input_data = preprocess_audio(temp_path)
+            input_data = preprocess_audio(st.session_state.temp_path)
             is_unhealthy, confidence = predict_heart_sound(input_data)
 
         # Display Results
@@ -90,7 +101,8 @@ if temp_path:
             st.success(f"Prediction: **Healthy Heart Sound**\nConfidence: {confidence:.2f}%")
 
         # Cleanup temporary file
-        os.unlink(temp_path)
+        os.unlink(st.session_state.temp_path)
+        st.session_state.temp_path = None
 
 st.markdown("---")
 st.write("**Note:** This tool is for preliminary detection purposes only. Please consult a healthcare professional for a proper diagnosis.")
