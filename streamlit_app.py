@@ -7,8 +7,6 @@ import os
 import time
 from scipy import signal
 from tensorflow.keras.models import load_model
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorFactoryBase
-import av
 
 # Load your saved model
 MODEL_PATH = 'heart_sound_model.h5'
@@ -59,30 +57,47 @@ def predict_heart_sound(preprocessed_data):
     confidence = prediction[0][0] if is_unhealthy else 1 - prediction[0][0]
     return is_unhealthy, confidence * 100
 
-# Audio Processor Class for WebRTC Recording
-class AudioProcessor(AudioProcessorFactoryBase):
-    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        self.audio_buffer = frame.to_ndarray()
-        return frame
-
-def record_audio():
-    webrtc_ctx = webrtc_streamer(
-        key="recorder",
-        mode=WebRtcMode.SENDONLY,
-        audio_processor_factory=AudioProcessor,
-        media_stream_constraints={"audio": True},
-    )
-    if webrtc_ctx.audio_processor:
-        return webrtc_ctx.audio_processor.audio_buffer
-    return None
-
 # Streamlit App
 st.title("Heart Sound Detection Tool")
 st.write("Upload a .wav file or record your heart sound for analysis.")
 
 # Audio upload
 uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
-recorded_audio = record_audio()
+
+# JavaScript-based audio recording
+st.markdown(
+    """
+    <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    function startRecording() {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+        });
+    }
+    function stopRecording() {
+        mediaRecorder.stop();
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = audioUrl;
+            downloadLink.download = 'recorded_audio.wav';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        };
+    }
+    </script>
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()">Stop Recording</button>
+    """,
+    unsafe_allow_html=True
+)
 
 temp_path = None
 if uploaded_file is not None:
@@ -90,11 +105,6 @@ if uploaded_file is not None:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
-elif recorded_audio is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        sf.write(temp_audio.name, recorded_audio, 22050)
-        temp_path = temp_audio.name
-    st.audio(temp_path, format='audio/wav')
 
 if temp_path:
     validation_results, audio_data, sr = validate_audio(temp_path)
