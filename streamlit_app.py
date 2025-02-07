@@ -4,10 +4,9 @@ import librosa
 import soundfile as sf
 import tempfile
 import os
-import time
 from scipy import signal
 from tensorflow.keras.models import load_model
-from streamlit_audio_recorder import st_audio_recorder
+from audio_recorder_streamlit import audio_recorder
 
 # Load your saved model
 MODEL_PATH = 'heart_sound_model.h5'
@@ -67,7 +66,7 @@ uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
 
 # Audio recording
 st.write("Or record your heart sound below:")
-recorded_audio = st_audio_recorder(start_prompt="🎤 Start Recording", stop_prompt="🛑 Stop Recording", key="recorder")
+audio_bytes = audio_recorder()
 
 temp_path = None
 if uploaded_file is not None:
@@ -75,9 +74,9 @@ if uploaded_file is not None:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
-elif recorded_audio is not None:
+elif audio_bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(recorded_audio)
+        temp_audio.write(audio_bytes)
         temp_path = temp_audio.name
     st.audio(temp_path, format='audio/wav')
 
