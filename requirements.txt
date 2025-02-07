@@ -7,7 +7,4 @@ matplotlib==3.7.2
 librosa==0.10.0.post2
 soundfile>=0.10.3.post1
 numpy>=1.21.0
-# Added packages for audio recording and processing
-sounddevice>=0.4.6
-wavio>=0.0.7
-scipy>=1.11.3  # Required for audio filtering
+scipy>=1.11.3
