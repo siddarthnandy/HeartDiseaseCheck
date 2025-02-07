@@ -5,9 +5,6 @@ import soundfile as sf
 from tensorflow.keras.models import load_model
 import tempfile
 import os
-import sounddevice as sd
-import wavio
-import time
 from scipy import signal
 
 # Load your saved model
@@ -63,37 +60,23 @@ def preprocess_audio(file_path, n_mfcc=20):
     return process_raw_audio(y, sr, n_mfcc)
 
 # Function to validate audio quality
-def validate_audio(audio_data, sr):
+def validate_audio(file_path):
     """Validate audio quality metrics"""
-    noise_floor = np.mean(np.abs(audio_data[:int(sr * 0.1)]))
-    signal_power = np.mean(np.abs(audio_data))
-    snr = 20 * np.log10(signal_power / noise_floor) if noise_floor > 0 else 0
-    peak_amplitude = np.max(np.abs(audio_data))
+    y, sr = librosa.load(file_path)
     
-    return {
+    # Calculate signal quality metrics
+    noise_floor = np.mean(np.abs(y[:int(sr * 0.1)]))
+    signal_power = np.mean(np.abs(y))
+    snr = 20 * np.log10(signal_power / noise_floor) if noise_floor > 0 else 0
+    peak_amplitude = np.max(np.abs(y))
+    
+    validation_results = {
         'snr': snr > 15,
         'amplitude': 0.1 < peak_amplitude < 0.9,
-        'duration': len(audio_data) >= sr * 5
+        'duration': len(y) >= sr * 5
     }
-
-# Function to record audio
-def record_audio(duration, samplerate=22050):
-    """Record audio with countdown"""
-    for i in range(3, 0, -1):
-        st.write(f"Recording starts in {i}...")
-        time.sleep(1)
     
-    st.write("Recording...")
-    recording = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='float32')
-    sd.wait()
-    st.write("Recording complete!")
-    return recording.flatten(), samplerate  # Ensure 1D array
-
-# Function to play audio
-def play_audio(audio_data, samplerate):
-    """Play audio data"""
-    sd.play(audio_data, samplerate)
-    sd.wait()
+    return validation_results, y, sr
 
 # Function to make prediction
 def predict_heart_sound(preprocessed_data):
@@ -105,107 +88,76 @@ def predict_heart_sound(preprocessed_data):
 
 # Streamlit App
 st.title("Heart Sound Detection Tool")
-st.write("Upload a .wav file or record audio to get a prediction on whether the heart sound is healthy or unhealthy.")
+st.write("Upload a .wav file to get a prediction on whether the heart sound is healthy or unhealthy.")
 
-# Create tabs for upload and record options
-tab1, tab2 = st.tabs(["Upload Audio", "Record Audio"])
+uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
 
-# Upload tab
-with tab1:
-    uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
+if uploaded_file is not None:
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(uploaded_file.getbuffer())
+        temp_path = temp_audio.name
     
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-            temp_audio.write(uploaded_file.getbuffer())
-            temp_path = temp_audio.name
-        
-        st.audio(uploaded_file, format='audio/wav')
-        
-        if st.button("Analyze Uploaded Audio"):
-            with st.spinner("Processing audio..."):
-                input_data = preprocess_audio(temp_path)
-            
-            with st.spinner("Making prediction..."):
-                is_unhealthy, confidence = predict_heart_sound(input_data)
-            
-            if is_unhealthy:
-                st.error("Prediction: Unhealthy Heart Sound")
-            else:
-                st.success("Prediction: Healthy Heart Sound")
-            st.write(f"Confidence: {confidence:.2f}%")
-            
-            os.unlink(temp_path)
-
-# Record tab
-with tab2:
-    if 'recording_state' not in st.session_state:
-        st.session_state.recording_state = 'stopped'
-        st.session_state.recorded_audio = None
-        st.session_state.recorded_file = None
-
-    col1, col2 = st.columns(2)
+    # Validate the audio file
+    validation_results, audio_data, sr = validate_audio(temp_path)
     
-    with col1:
-        if st.button("Start Recording"):
-            st.session_state.recording_state = 'recording'
-            recording, sr = record_audio(7)  # Record 7 seconds
-            
-            # Validate recording quality
-            validation_results = validate_audio(recording, sr)
-            
-            if all(validation_results.values()):
-                # Save recording temporarily
-                temp_path = tempfile.mktemp(suffix=".wav")
-                wavio.write(temp_path, recording, sr, sampwidth=2)
-                
-                # Store both raw audio and processed version
-                st.session_state.recorded_audio = recording
-                st.session_state.recorded_file = temp_path
-                st.session_state.recording_state = 'stopped'
-                st.experimental_rerun()
-            else:
-                st.error("Recording quality issues detected:")
-                if not validation_results['snr']:
-                    st.write("- Too much background noise")
-                if not validation_results['amplitude']:
-                    st.write("- Recording volume too high or too low")
-                if not validation_results['duration']:
-                    st.write("- Recording too short")
-                st.write("Please try recording again in a quieter environment.")
-
-    with col2:
-        if st.session_state.recorded_audio is not None:
-            if st.button("Play Recording"):
-                play_audio(st.session_state.recorded_audio, 22050)
-
-    if st.session_state.recorded_file is not None:
-        st.audio(st.session_state.recorded_file, format='audio/wav')
+    # Display the audio player
+    st.audio(uploaded_file, format='audio/wav')
+    
+    # Check audio quality
+    if not all(validation_results.values()):
+        st.warning("Audio quality issues detected:")
+        if not validation_results['snr']:
+            st.write("- High background noise detected")
+        if not validation_results['amplitude']:
+            st.write("- Audio volume is not optimal")
+        if not validation_results['duration']:
+            st.write("- Audio is shorter than 5 seconds")
+        st.write("These issues might affect the accuracy of the prediction.")
+    
+    if st.button("Analyze Audio"):
+        with st.spinner("Processing audio..."):
+            input_data = preprocess_audio(temp_path)
         
-        if st.button("Analyze Recorded Audio"):
-            with st.spinner("Processing audio..."):
-                # Process the raw audio data directly
-                input_data = process_raw_audio(
-                    st.session_state.recorded_audio,
-                    22050  # We know this is our recording sample rate
-                )
-            
-            with st.spinner("Making prediction..."):
-                is_unhealthy, confidence = predict_heart_sound(input_data)
-            
-            if is_unhealthy:
-                st.error("Prediction: Unhealthy Heart Sound")
-            else:
-                st.success("Prediction: Healthy Heart Sound")
-            st.write(f"Confidence: {confidence:.2f}%")
+        with st.spinner("Making prediction..."):
+            is_unhealthy, confidence = predict_heart_sound(input_data)
+        
+        # Display results
+        if is_unhealthy:
+            st.error("Prediction: Unhealthy Heart Sound")
+        else:
+            st.success("Prediction: Healthy Heart Sound")
+        st.write(f"Confidence: {confidence:.2f}%")
+        
+        # Add detailed analysis
+        st.write("\nAudio Analysis:")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("Signal Quality Metrics:")
+            st.write(f"- Duration: {len(audio_data)/sr:.1f} seconds")
+            st.write(f"- Sample Rate: {sr} Hz")
+        with col2:
+            st.write("Preprocessing Applied:")
+            st.write("- Bandpass filtering (20-400 Hz)")
+            st.write("- Noise reduction")
+            st.write("- Length normalization")
+        
+        # Cleanup temporary file
+        os.unlink(temp_path)
+
+# Instructions for recording audio
+st.write("\n### How to Record Heart Sounds")
+st.write("""
+1. Use a digital stethoscope or high-quality microphone
+2. Record in a quiet environment
+3. Position the recording device on these locations:
+   - Aortic area (2nd right intercostal space)
+   - Pulmonic area (2nd left intercostal space)
+   - Tricuspid area (4th left intercostal space)
+   - Mitral area (5th left intercostal space)
+4. Record for at least 5 seconds
+5. Save as a WAV file and upload above
+""")
 
 # Footer
-st.write("\n**Note:** This tool is for preliminary detection purposes only and not for diagnostic use.")
-
-# Cleanup temporary files when the app is closed
-def cleanup():
-    if st.session_state.recorded_file and os.path.exists(st.session_state.recorded_file):
-        os.unlink(st.session_state.recorded_file)
-
-# Register the cleanup function
-import atexit
-atexit.register(cleanup)
+st.write("\n**Note:** This tool is for preliminary detection purposes only and not for diagnostic use. Please consult a healthcare professional for proper diagnosis.")
