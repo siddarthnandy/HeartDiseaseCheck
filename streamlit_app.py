@@ -14,7 +14,6 @@ model = load_model(MODEL_PATH)
 
 # Function to process raw audio data
 def process_raw_audio(y, sr, n_mfcc=20):
-    """Process raw audio data with full preprocessing pipeline"""
     if sr != 22050:
         y = librosa.resample(y, orig_sr=sr, target_sr=22050)
         sr = 22050
@@ -40,16 +39,6 @@ def preprocess_audio(file_path, n_mfcc=20):
     y, sr = librosa.load(file_path, duration=5.0)
     return process_raw_audio(y, sr, n_mfcc)
 
-# Function to validate audio quality
-def validate_audio(file_path):
-    y, sr = librosa.load(file_path)
-    noise_floor = np.mean(np.abs(y[:int(sr * 0.1)]))
-    signal_power = np.mean(np.abs(y))
-    snr = 20 * np.log10(signal_power / noise_floor) if noise_floor > 0 else 0
-    peak_amplitude = np.max(np.abs(y))
-    validation_results = {'snr': snr > 15, 'amplitude': 0.1 < peak_amplitude < 0.9, 'duration': len(y) >= sr * 5}
-    return validation_results, y, sr
-
 # Function to make prediction
 def predict_heart_sound(preprocessed_data):
     prediction = model.predict(preprocessed_data)
@@ -58,50 +47,50 @@ def predict_heart_sound(preprocessed_data):
     return is_unhealthy, confidence * 100
 
 # Streamlit App
-st.title("Heart Sound Detection Tool")
-st.write("Upload a .wav file or record your heart sound for analysis.")
+st.title("🫀 Heart Sound Detection Tool")
+st.write("Analyze your heart sounds by uploading a file or recording directly.")
 
-# Audio upload
-uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
+# File upload and recording UI
+st.markdown("### 📤 Upload or Record")
+col1, col2 = st.columns(2)
 
-# Audio recording
-st.write("Or record your heart sound below:")
-audio_bytes = audio_recorder()
+with col1:
+    st.markdown("#### Upload a .wav file")
+    uploaded_file = st.file_uploader("", type="wav", label_visibility="collapsed")
+
+with col2:
+    st.markdown("#### Record your heart sound")
+    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black")
 
 temp_path = None
+
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
+
 elif audio_bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_bytes)
         temp_path = temp_audio.name
     st.audio(temp_path, format='audio/wav')
 
+# Prediction and Results
 if temp_path:
-    validation_results, audio_data, sr = validate_audio(temp_path)
-    if not all(validation_results.values()):
-        st.warning("Audio quality issues detected:")
-        if not validation_results['snr']:
-            st.write("- High background noise detected")
-        if not validation_results['amplitude']:
-            st.write("- Audio volume is not optimal")
-        if not validation_results['duration']:
-            st.write("- Audio is shorter than 5 seconds")
-        st.write("These issues might affect the accuracy of the prediction.")
-    
-    if st.button("Analyze Audio"):
-        with st.spinner("Processing audio..."):
+    if st.button("🔍 Analyze Heart Sound"):
+        with st.spinner("Processing audio and making prediction..."):
             input_data = preprocess_audio(temp_path)
-        with st.spinner("Making prediction..."):
             is_unhealthy, confidence = predict_heart_sound(input_data)
+
+        # Display Results
         if is_unhealthy:
-            st.error("Prediction: Unhealthy Heart Sound")
+            st.error(f"Prediction: **Unhealthy Heart Sound**\nConfidence: {confidence:.2f}%")
         else:
-            st.success("Prediction: Healthy Heart Sound")
-        st.write(f"Confidence: {confidence:.2f}%")
+            st.success(f"Prediction: **Healthy Heart Sound**\nConfidence: {confidence:.2f}%")
+
+        # Cleanup temporary file
         os.unlink(temp_path)
 
-st.write("\n**Note:** This tool is for preliminary detection purposes only and not for diagnostic use. Please consult a healthcare professional for proper diagnosis.")
+st.markdown("---")
+st.write("**Note:** This tool is for preliminary detection purposes only. Please consult a healthcare professional for a proper diagnosis.")
