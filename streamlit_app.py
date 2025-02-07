@@ -7,6 +7,7 @@ import os
 import time
 from scipy import signal
 from tensorflow.keras.models import load_model
+from streamlit_audio_recorder import st_audio_recorder
 
 # Load your saved model
 MODEL_PATH = 'heart_sound_model.h5'
@@ -64,40 +65,9 @@ st.write("Upload a .wav file or record your heart sound for analysis.")
 # Audio upload
 uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
 
-# JavaScript-based audio recording
-st.markdown(
-    """
-    <script>
-    let mediaRecorder;
-    let audioChunks = [];
-    function startRecording() {
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
-        });
-    }
-    function stopRecording() {
-        mediaRecorder.stop();
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const downloadLink = document.createElement('a');
-            downloadLink.href = audioUrl;
-            downloadLink.download = 'recorded_audio.wav';
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-        };
-    }
-    </script>
-    <button onclick="startRecording()">Start Recording</button>
-    <button onclick="stopRecording()">Stop Recording</button>
-    """,
-    unsafe_allow_html=True
-)
+# Audio recording
+st.write("Or record your heart sound below:")
+recorded_audio = st_audio_recorder(start_prompt="🎤 Start Recording", stop_prompt="🛑 Stop Recording", key="recorder")
 
 temp_path = None
 if uploaded_file is not None:
@@ -105,6 +75,11 @@ if uploaded_file is not None:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
+elif recorded_audio is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(recorded_audio)
+        temp_path = temp_audio.name
+    st.audio(temp_path, format='audio/wav')
 
 if temp_path:
     validation_results, audio_data, sr = validate_audio(temp_path)
