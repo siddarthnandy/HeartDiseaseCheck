@@ -8,4 +8,4 @@ librosa==0.10.0.post2
 soundfile>=0.10.3.post1
 numpy>=1.21.0
 scipy>=1.11.3
-streamlit-mic-recorder
+streamlit_webrtc
