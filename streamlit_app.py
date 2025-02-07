@@ -7,7 +7,8 @@ import os
 import time
 from scipy import signal
 from tensorflow.keras.models import load_model
-from streamlit_mic_recorder import mic_recorder
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorFactoryBase
+import av
 
 # Load your saved model
 MODEL_PATH = 'heart_sound_model.h5'
@@ -16,77 +17,64 @@ model = load_model(MODEL_PATH)
 # Function to process raw audio data
 def process_raw_audio(y, sr, n_mfcc=20):
     """Process raw audio data with full preprocessing pipeline"""
-    # 1. Resample to 22050 Hz if necessary
     if sr != 22050:
         y = librosa.resample(y, orig_sr=sr, target_sr=22050)
         sr = 22050
-    
-    # 2. Apply bandpass filter (20-400Hz - typical heart sound range)
     nyquist = sr / 2
     low = 20 / nyquist
     high = 400 / nyquist
     b, a = signal.butter(4, [low, high], btype='band')
     y = signal.filtfilt(b, a, y)
-    
-    # 3. Normalize audio
     y = librosa.util.normalize(y)
-    
-    # 4. Remove silence and ensure consistent length
     y_trimmed, _ = librosa.effects.trim(y, top_db=20)
-    
-    # 5. Ensure exactly 5 seconds length
     target_length = sr * 5
     if len(y_trimmed) > target_length:
         y_trimmed = y_trimmed[:target_length]
     elif len(y_trimmed) < target_length:
         y_trimmed = np.pad(y_trimmed, (0, target_length - len(y_trimmed)))
-    
-    # 6. Extract MFCC features
     mfcc = librosa.feature.mfcc(y=y_trimmed, sr=sr, n_mfcc=n_mfcc)
-    
-    # 7. Add delta features
-    mfcc_delta = librosa.feature.delta(mfcc)
-    mfcc_delta2 = librosa.feature.delta(mfcc, order=2)
-    
-    # 8. Reshape for model input
-    mfcc = mfcc.T
-    mfcc = mfcc.reshape(1, 216, 20)
-    
+    mfcc = mfcc.T.reshape(1, 216, 20)
     return mfcc
 
 # Function to preprocess audio file
 @st.cache_data
 def preprocess_audio(file_path, n_mfcc=20):
-    """Load and preprocess audio file"""
     y, sr = librosa.load(file_path, duration=5.0)
     return process_raw_audio(y, sr, n_mfcc)
 
 # Function to validate audio quality
 def validate_audio(file_path):
-    """Validate audio quality metrics"""
     y, sr = librosa.load(file_path)
-    
-    # Calculate signal quality metrics
     noise_floor = np.mean(np.abs(y[:int(sr * 0.1)]))
     signal_power = np.mean(np.abs(y))
     snr = 20 * np.log10(signal_power / noise_floor) if noise_floor > 0 else 0
     peak_amplitude = np.max(np.abs(y))
-    
-    validation_results = {
-        'snr': snr > 15,
-        'amplitude': 0.1 < peak_amplitude < 0.9,
-        'duration': len(y) >= sr * 5
-    }
-    
+    validation_results = {'snr': snr > 15, 'amplitude': 0.1 < peak_amplitude < 0.9, 'duration': len(y) >= sr * 5}
     return validation_results, y, sr
 
 # Function to make prediction
 def predict_heart_sound(preprocessed_data):
-    """Make prediction and return result with confidence"""
     prediction = model.predict(preprocessed_data)
     is_unhealthy = prediction > 0.5
     confidence = prediction[0][0] if is_unhealthy else 1 - prediction[0][0]
     return is_unhealthy, confidence * 100
+
+# Audio Processor Class for WebRTC Recording
+class AudioProcessor(AudioProcessorFactoryBase):
+    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
+        self.audio_buffer = frame.to_ndarray()
+        return frame
+
+def record_audio():
+    webrtc_ctx = webrtc_streamer(
+        key="recorder",
+        mode=WebRtcMode.SENDONLY,
+        audio_processor_factory=AudioProcessor,
+        media_stream_constraints={"audio": True},
+    )
+    if webrtc_ctx.audio_processor:
+        return webrtc_ctx.audio_processor.audio_buffer
+    return None
 
 # Streamlit App
 st.title("Heart Sound Detection Tool")
@@ -94,9 +82,7 @@ st.write("Upload a .wav file or record your heart sound for analysis.")
 
 # Audio upload
 uploaded_file = st.file_uploader("Choose a .wav file", type="wav")
-
-# Audio recording
-recorded_audio = mic_recorder(start_prompt="Start Recording", stop_prompt="Stop Recording", key="recorder", format="wav", sample_rate=22050, duration=7)
+recorded_audio = record_audio()
 
 temp_path = None
 if uploaded_file is not None:
@@ -104,9 +90,9 @@ if uploaded_file is not None:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
     st.audio(uploaded_file, format='audio/wav')
-elif recorded_audio:
+elif recorded_audio is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(recorded_audio)
+        sf.write(temp_audio.name, recorded_audio, 22050)
         temp_path = temp_audio.name
     st.audio(temp_path, format='audio/wav')
 
