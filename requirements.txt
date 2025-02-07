@@ -9,4 +9,4 @@ soundfile>=0.10.3.post1
 numpy>=1.21.0
 scipy>=1.11.3
 streamlit_webrtc
-streamlit_audio_recorder
+audio-recorder-streamlit
