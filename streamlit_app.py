@@ -20,21 +20,24 @@ def preprocess_audio(file_path, n_mfcc=20):
     mfcc = mfcc.reshape(1, 216, 20)
     return mfcc
 
-# Streamlit App
-st.title("🫀 Heart Sound Detection Tool")
-st.write("Upload a .wav file or record your heart sound to get a prediction.")
+# Streamlit UI Setup
+st.set_page_config(page_title="CardioAI - Heart Sound Analysis", page_icon="🫀", layout="centered")
+st.title("🫀 CardioAI - Heart Sound Analysis")
+st.write("Upload or record your heart sound to analyze for potential abnormalities.")
 
-# File uploader and recorder
+# File uploader and recorder with improved UI
+st.markdown("### 🎤 Record a 7-Second Heart Sound or Upload a File")
 col1, col2 = st.columns(2)
-with col1:
-    st.markdown("#### Upload a .wav file")
-    uploaded_file = st.file_uploader("", type="wav", label_visibility="collapsed")
-
-with col2:
-    st.markdown("#### Record your heart sound")
-    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black")
 
 temp_path = None
+
+with col1:
+    st.markdown("#### 📂 Upload a .wav file")
+    uploaded_file = st.file_uploader("", type=["wav"], label_visibility="collapsed")
+
+with col2:
+    st.markdown("#### 🎙️ Record Your Heart Sound (7s)")
+    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record (7s)", key="audio_recorder", pause_threshold=7.0)
 
 # Handle uploaded file
 if uploaded_file is not None:
@@ -43,7 +46,7 @@ if uploaded_file is not None:
         temp_path = temp_audio.name
     st.audio(uploaded_file, format="audio/wav")
 
-# Handle recorded audio
+# Handle recorded audio (fixed 7-second duration)
 elif audio_bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_bytes)
@@ -52,7 +55,7 @@ elif audio_bytes:
 
 # Process and predict
 if temp_path is not None:
-    if st.button("🔍 Analyze Heart Sound"):
+    if st.button("🔍 Analyze Heart Sound", use_container_width=True):
         with st.spinner("Processing audio..."):
             input_data = preprocess_audio(temp_path)
         with st.spinner("Making prediction..."):
@@ -60,13 +63,13 @@ if temp_path is not None:
 
         # Display result
         if prediction > 0.5:
-            st.error("Prediction: Unhealthy Heart Sound")
+            st.error("🚨 **Warning:** Unhealthy Heart Sound Detected. Consider consulting a doctor.")
         else:
-            st.success("Prediction: Healthy Heart Sound")
+            st.success("✅ **Good News:** Your heart sound appears normal.")
 
         # Clean up temporary file
         os.unlink(temp_path)
 
 # Footer
 st.markdown("---")
-st.write("**Note:** This tool is for preliminary detection purposes only and not for diagnostic use.")
+st.info("**Disclaimer:** CardioAI is not a medical tool and should not be used for diagnosis. Always consult a professional for medical concerns.")
