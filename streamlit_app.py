@@ -22,22 +22,22 @@ def preprocess_audio(file_path, n_mfcc=20):
 
 # Streamlit UI Setup
 st.set_page_config(page_title="CardioAI - Heart Sound Analysis", page_icon="🫀", layout="centered")
-st.title("🫀 CardioAI - Heart Sound Analysis")
+st.title("CardioAI - Heart Sound Analysis")
 st.write("Upload or record your heart sound to analyze for potential abnormalities.")
 
-# File uploader and recorder with improved UI
-st.markdown("### 🎤 Record a 7-Second Heart Sound or Upload a File")
+# File uploader and recorder with clean UI
+st.markdown("### Record or Upload Your Heart Sound (7s)")
 col1, col2 = st.columns(2)
 
 temp_path = None
 
 with col1:
-    st.markdown("#### 📂 Upload a .wav file")
+    st.markdown("#### Upload a .wav file")
     uploaded_file = st.file_uploader("", type=["wav"], label_visibility="collapsed")
 
 with col2:
-    st.markdown("#### 🎙️ Record Your Heart Sound (7s)")
-    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record (7s)", key="audio_recorder", pause_threshold=7.0)
+    st.markdown("#### Record Your Heart Sound")
+    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record", key="audio_recorder", pause_threshold=7.0)
 
 # Handle uploaded file
 if uploaded_file is not None:
@@ -55,7 +55,7 @@ elif audio_bytes:
 
 # Process and predict
 if temp_path is not None:
-    if st.button("🔍 Analyze Heart Sound", use_container_width=True):
+    if st.button("Analyze Heart Sound", use_container_width=True):
         with st.spinner("Processing audio..."):
             input_data = preprocess_audio(temp_path)
         with st.spinner("Making prediction..."):
@@ -63,13 +63,13 @@ if temp_path is not None:
 
         # Display result
         if prediction > 0.5:
-            st.error("🚨 **Warning:** Unhealthy Heart Sound Detected. Consider consulting a doctor.")
+            st.error("Unhealthy Heart Sound Detected. Consider consulting a doctor.")
         else:
-            st.success("✅ **Good News:** Your heart sound appears normal.")
+            st.success("Your heart sound appears normal.")
 
         # Clean up temporary file
         os.unlink(temp_path)
 
 # Footer
 st.markdown("---")
-st.info("**Disclaimer:** CardioAI is not a medical tool and should not be used for diagnosis. Always consult a professional for medical concerns.")
+st.info("Disclaimer: CardioAI is not a medical tool and should not be used for diagnosis. Always consult a professional for medical concerns.")
