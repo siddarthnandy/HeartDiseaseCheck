@@ -23,21 +23,13 @@ def preprocess_audio(file_path, n_mfcc=20):
 # Streamlit UI Setup
 st.set_page_config(page_title="CardioAI - Heart Sound Analysis", page_icon="🫀", layout="centered")
 st.title("CardioAI - Heart Sound Analysis")
-st.write("Upload or record your heart sound to analyze for potential abnormalities.")
+st.write("Analyze your heart sound for potential abnormalities by uploading or recording a sample.")
 
-# File uploader and recorder with clean UI
-st.markdown("### Record or Upload Your Heart Sound (7s)")
-col1, col2 = st.columns(2)
-
+# File uploader and recorder with minimal UI
 temp_path = None
 
-with col1:
-    st.markdown("#### Upload a .wav file")
-    uploaded_file = st.file_uploader("", type=["wav"], label_visibility="collapsed")
-
-with col2:
-    st.markdown("#### Record Your Heart Sound")
-    audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record", key="audio_recorder", pause_threshold=7.0)
+uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"], label_visibility="visible")
+audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record (7s)", key="audio_recorder", pause_threshold=7.0)
 
 # Handle uploaded file
 if uploaded_file is not None:
