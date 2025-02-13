@@ -48,16 +48,16 @@ elif audio_bytes:
 # Process and predict
 if temp_path is not None:
     if st.button("Analyze Heart Sound", use_container_width=True):
-        with st.spinner("Processing audio..."):
+        with st.spinner("Processing audio... ⏳"):
             input_data = preprocess_audio(temp_path)
-        with st.spinner("Making prediction..."):
+        with st.spinner("Analyzing heart sound... 🔄"):
             prediction = model.predict(input_data)
 
         # Display result
         if prediction > 0.5:
-            st.error("Unhealthy Heart Sound Detected. Consider consulting a doctor.")
+            st.error("Abnormal Heart Sound Detected. Consider consulting a doctor.")
         else:
-            st.success("Your heart sound appears normal.")
+            st.success("No abnormalities found -- Healthy Heart")
 
         # Clean up temporary file
         os.unlink(temp_path)
