@@ -7,29 +7,40 @@ import tempfile
 import os
 from audio_recorder_streamlit import audio_recorder
 
-# Load your saved model
-MODEL_PATH = 'heart_sound_model.h5'
+# Load the trained model
+MODEL_PATH = 'final_best_model.h5'
 model = load_model(MODEL_PATH)
 
-# Function to preprocess audio
+# Function to preprocess audio before feeding into the model
 @st.cache_data
-def preprocess_audio(file_path, n_mfcc=20):
+def preprocess_audio(file_path, n_mfcc=40):
     y, sr = librosa.load(file_path, duration=5.0)
+    y = librosa.effects.preemphasis(y)
+    y = y / np.max(np.abs(y)) * 0.95  # Normalize amplitude
+    
+    # Feature extraction
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
-    mfcc = mfcc.T
-    mfcc = mfcc.reshape(1, 216, 20)
-    return mfcc
+    mfcc_delta = librosa.feature.delta(mfcc)
+    mfcc_delta2 = librosa.feature.delta(mfcc, order=2)
+    combined_features = np.vstack((mfcc, mfcc_delta, mfcc_delta2)).T
+    
+    # Reshape for model input
+    combined_features = combined_features[:216, :]  # Ensure fixed shape
+    combined_features = np.expand_dims(combined_features, axis=0)  # Add batch dimension
+    return combined_features
 
 # Streamlit UI Setup
 st.set_page_config(page_title="CardioAI - Heart Sound Analysis", page_icon="🫀", layout="centered")
 st.title("CardioAI - Heart Sound Analysis")
 st.write("Analyze your heart sound for potential abnormalities by uploading or recording a sample.")
 
-# File uploader and recorder with minimal UI
 temp_path = None
 
+# File uploader for manual file upload
 uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"], label_visibility="visible")
-audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record (7s)", key="audio_recorder", pause_threshold=7.0)
+
+# Audio recorder (basic recording without glitchy timing constraints)
+audio_bytes = audio_recorder(icon_size="2x", recording_color="red", neutral_color="black", text="Record", key="audio_recorder")
 
 # Handle uploaded file
 if uploaded_file is not None:
@@ -38,7 +49,7 @@ if uploaded_file is not None:
         temp_path = temp_audio.name
     st.audio(uploaded_file, format="audio/wav")
 
-# Handle recorded audio (fixed 7-second duration)
+# Handle recorded audio
 elif audio_bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_bytes)
