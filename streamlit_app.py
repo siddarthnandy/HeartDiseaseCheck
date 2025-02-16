@@ -29,6 +29,14 @@ def preprocess_audio(file_path, n_mfcc=40):
     combined_features = np.expand_dims(combined_features, axis=0)  # Add batch dimension
     return combined_features
 
+# Function to amplify audio
+def amplify_audio(file_path, factor=5.0):
+    y, sr = librosa.load(file_path, sr=None)
+    y = np.clip(y * factor, -1.0, 1.0)  # Amplify and clip to avoid distortion
+    amplified_path = file_path.replace(".wav", "_amplified.wav")
+    sf.write(amplified_path, y, sr)
+    return amplified_path
+
 # Streamlit UI Setup
 st.set_page_config(page_title="CardioAI - Heart Sound Analysis", page_icon="🫀", layout="centered")
 st.title("CardioAI - Heart Sound Analysis")
@@ -47,14 +55,16 @@ if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(uploaded_file.getbuffer())
         temp_path = temp_audio.name
-    st.audio(uploaded_file, format="audio/wav")
+    amplified_path = amplify_audio(temp_path)
+    st.audio(amplified_path, format="audio/wav")
 
 # Handle recorded audio
 elif audio_bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_bytes)
         temp_path = temp_audio.name
-    st.audio(temp_path, format="audio/wav")
+    amplified_path = amplify_audio(temp_path)
+    st.audio(amplified_path, format="audio/wav")
 
 # Process and predict
 if temp_path is not None:
@@ -72,6 +82,7 @@ if temp_path is not None:
 
         # Clean up temporary file
         os.unlink(temp_path)
+        os.unlink(amplified_path)
 
 # Footer
 st.markdown("---")
